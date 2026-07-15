@@ -1,29 +1,50 @@
-# Kubernetes Networking - Ingress Controller
+<div align="center">
 
-> **Date:** 15 July 2026
->
-> **Lab Goal:** Understand why Ingress exists, how Ingress Controllers work internally, and inspect what actually happens inside NGINX when an Ingress resource is created.
+# Kubernetes Networking: Ingress Controller
+
+**A hands-on journey from Pod networking to production-ready Ingress routing**
+
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Networking-326CE5?logo=kubernetes&logoColor=white)
+![NGINX](https://img.shields.io/badge/Ingress-NGINX-009639?logo=nginx&logoColor=white)
+![Lab](https://img.shields.io/badge/Type-Hands--on_Lab-orange)
+
+</div>
+
+> [!NOTE]
+> **Lab date:** 15 July 2026  
+> **Goal:** Understand why Ingress exists, how Ingress Controllers work internally, and what happens inside NGINX when an Ingress resource is created.
+
+## Contents
+
+- [The question](#the-question)
+- [Why Pod IPs are not enough](#1-why-pod-ips-are-not-enough)
+- [Kubernetes Services](#2-kubernetes-services)
+- [Why we need Ingress](#3-why-we-need-ingress)
+- [How Ingress Controllers work](#4-how-ingress-controllers-work)
+- [Hands-on lab](#5-hands-on-lab)
+- [Inspecting NGINX configuration](#6-inspecting-nginx-configuration)
+- [Key takeaways](#key-takeaways)
+- [Interview questions](#interview-questions)
 
 ---
 
-# Question I Wanted to Answer
+## The Question
 
 While learning Kubernetes networking, one question kept coming to my mind.
 
-> If a Service of type LoadBalancer already exposes my application to the internet, why do we need an Ingress?
+> **If a `LoadBalancer` Service already exposes my application to the internet, why do we need an Ingress?**
 
 Instead of just reading documentation, I built a small lab to understand how everything works internally.
 
 ---
 
-# Step 1 - Why can't Pods communicate using Pod IPs?
+## 1. Why Pod IPs Are Not Enough
 
 Every Pod gets an IP address.
 
 For example,
 
 ```
-
 Frontend Pod
 
 10.244.0.5
@@ -33,7 +54,6 @@ Frontend Pod
 Backend Pod
 
 10.244.0.8
-
 ```
 
 At first glance, this seems perfectly fine.
@@ -47,7 +67,6 @@ Kubernetes creates another Pod.
 Now the IP becomes
 
 ```
-
 Old Pod
 
 10.244.0.8
@@ -57,7 +76,6 @@ Old Pod
 New Pod
 
 10.244.0.15
-
 ```
 
 Now the frontend is still trying to communicate with
@@ -70,17 +88,9 @@ which no longer exists.
 
 This is exactly the networking problem Kubernetes Services solve.
 
-
-
 ---
 
-
-
----
-
-
-
-# Step 2 - Kubernetes Service
+## 2. Kubernetes Services
 
 A Service acts like a stable entry point in front of Pods.
 
@@ -89,7 +99,6 @@ Applications never communicate directly with Pods.
 Instead,
 
 ```
-
 Application
 
 ↓
@@ -99,7 +108,6 @@ Service
 ↓
 
 Pods
-
 ```
 
 The Service automatically finds Pods using
@@ -115,34 +123,28 @@ That is the beauty of Kubernetes networking.
 
 ---
 
-production-kubernetes-labs/networking/ingress-controller/screenshots/Screenshot 2026-07-15 030311.png
+![Kubernetes Service routing](<screenshots/Screenshot 2026-07-15 030311.png>)
 
 ---
 
-
-
-# Service Types
+### Service Types
 
 While reading the documentation, I realized Kubernetes offers different Service types depending on the use case.
 
 ---
 
-
-
-## ClusterIP
+#### ClusterIP
 
 Default Service.
 
 Only accessible from inside the cluster.
 
 ```
-
 Frontend Service
 
 ↓
 
 Backend Service
-
 ```
 
 No external access.
@@ -151,9 +153,7 @@ Perfect for microservice communication.
 
 ---
 
-
-
-## NodePort
+#### NodePort
 
 Suppose I want to access my application from outside the cluster.
 
@@ -187,9 +187,7 @@ So NodePort isn't a great production solution.
 
 ---
 
-
-
-## LoadBalancer
+#### LoadBalancer
 
 Cloud providers solve this problem.
 
@@ -233,27 +231,16 @@ and becomes accessible over the internet.
 
 ---
 
-
-
-### Interesting Observation
-
-LoadBalancer Services work only when Kubernetes is integrated with a cloud provider.
-
-If I'm running Kubernetes on bare-metal or on-premises,
-
-there is no cloud API available to create a Load Balancer automatically.
-
-Projects like **MetalLB** solve this problem by implementing LoadBalancer functionality for on-prem Kubernetes clusters.
+> [!IMPORTANT]
+> **Bare-metal consideration**
+>
+> `LoadBalancer` Services require cloud-provider integration. Bare-metal and on-premises clusters do not have a cloud API that can provision one automatically. Projects such as **MetalLB** provide this functionality outside cloud environments.
 
 ---
 
+## 3. Why We Need Ingress
 
-
-# Then Why Do We Need Ingress?
-
-This was the main question of today's lab.
-
-Imagine a company with
+Imagine a company with:
 
 - frontend
 - backend
@@ -263,31 +250,13 @@ Imagine a company with
 - notifications
 - analytics
 
-If every application is exposed using
+If every application uses `type: LoadBalancer`, every Service receives its own public IP address. With hundreds of microservices, this quickly becomes expensive and difficult to manage.
 
-```
-type: LoadBalancer
-```
-
-then every Service gets its own public IP address.
-
-With hundreds of microservices,
-
-this quickly becomes expensive and difficult to manage.
-
-Instead,
-
-we expose only one external Load Balancer
-
-↓
-
-and place an Ingress behind it.
-
-Now a single public endpoint can route traffic to multiple services.
+Ingress lets us expose one external load balancer and route its traffic to many Services through a single public endpoint.
 
 ---
 
-production-kubernetes-labs/networking/ingress-controller/screenshots/Screenshot 2026-07-15 030329.png
+![Ingress routing architecture](<screenshots/Screenshot 2026-07-15 030329.png>)
 
 ---
 
@@ -305,8 +274,6 @@ admin.example.com
 
 ---
 
-
-
 ### Path-Based Routing
 
 ```
@@ -317,31 +284,18 @@ example.com/backend
 example.com/payments
 ```
 
-One external IP.
-
-Multiple applications.
-
-Much cleaner architecture.
+**One external IP. Multiple applications. Cleaner architecture.**
 
 ---
 
+### The Key Insight
 
+> [!IMPORTANT]
+> An Ingress resource does **not** route traffic by itself.
 
-# The Biggest Thing I Learned Today
+Ingress is a Kubernetes object containing routing rules. Something still needs to implement those rules: the **Ingress Controller**.
 
-An Ingress resource does **not** route traffic.
-
-This was my biggest misconception.
-
-Ingress is simply a Kubernetes object.
-
-It contains routing rules.
-
-Something still needs to implement those rules.
-
-That component is called the
-
-# Ingress Controller
+## 4. How Ingress Controllers Work
 
 The Ingress Controller continuously watches the Kubernetes API.
 
@@ -355,9 +309,7 @@ Different controllers implement this differently.
 
 ---
 
-
-
-## Case 1 — NGINX Ingress Controller
+### Case 1 — NGINX Ingress Controller
 
 The NGINX controller watches the Ingress resource.
 
@@ -373,15 +325,13 @@ So my Kubernetes YAML becomes actual NGINX configuration.
 
 ---
 
-📷 **Insert Screenshot**
+![NGINX Ingress Controller configuration](<screenshots/Screenshot 2026-07-15 025909.png>)
 
-(nginx.conf showing `/frontend` and `/backend` location blocks.)
+![Generated NGINX configuration](<screenshots/Screenshot 2026-07-15 025940.png>)
 
 ---
 
-
-
-## Case 2 — AWS Load Balancer Controller
+### Case 2 — AWS Load Balancer Controller
 
 AWS doesn't use nginx.conf.
 
@@ -407,29 +357,20 @@ This was another "aha!" moment for me.
 
 ---
 
+## 5. Hands-on Lab
 
+The lab includes:
 
-# My Lab
-
-Today I created
-
-✅ Frontend Deployment
-
-✅ Backend Deployment
-
-✅ Frontend Service
-
-✅ Backend Service
-
-✅ NGINX Ingress Controller
-
-✅ Ingress Resource
+- [x] Frontend Deployment
+- [x] Backend Deployment
+- [x] Frontend Service
+- [x] Backend Service
+- [x] NGINX Ingress Controller
+- [x] Ingress resource
 
 ---
 
-
-
-## Deploy Resources
+### Deploy Resources
 
 ```bash
 kubectl apply -f frontend.yml
@@ -441,67 +382,50 @@ kubectl apply -f ingress.yml
 
 ---
 
-
-
-## Verify Pods
+### Verify Pods
 
 ```bash
 kubectl get pods
 ```
 
-📷 **Insert Screenshot**
-
-(Output of `kubectl get pods`.)
+![Ingress controller pods](<screenshots/Screenshot 2026-07-15 022343.png>)
 
 ---
 
-
-
-## Verify Ingress
+### Verify Ingress
 
 ```bash
 kubectl get ingress
 ```
-
-📷 **Insert Screenshot**
-
-(`kubectl get ingress` output.)
+![Ingress resource output](<screenshots/Screenshot 2026-07-15 024507.png>)
 
 ---
 
+### Test Routing
 
-
-## Test Routing
-
-Frontend
+#### Frontend
 
 ```bash
 curl http://<INGRESS-IP>/frontend \
 -H "Host: foo.bar.com"
 ```
 
-📷 **Insert Screenshot**
-
-(Curl output for frontend.)
+![Frontend routing test](<screenshots/Screenshot 2026-07-15 025233.png>)
 
 ---
 
-Backend
+#### Backend
 
 ```bash
 curl http://<INGRESS-IP>/backend \
 -H "Host: foo.bar.com"
 ```
 
-📷 **Insert Screenshot**
-
-(Curl output for backend.)
+![Backend routing test](<screenshots/Screenshot 2026-07-15 025233.png>)
 
 ---
 
-
-
-# Inspecting nginx.conf
+## 6. Inspecting NGINX Configuration
 
 This was probably the coolest part of today's lab.
 
@@ -535,15 +459,11 @@ Seeing my Kubernetes YAML transformed into actual NGINX configuration made the e
 
 ---
 
-📷 **Insert Screenshot**
-
-(Generated nginx.conf.)
+![Generated NGINX location blocks](<screenshots/Screenshot 2026-07-15 025909.png>)
 
 ---
 
-
-
-# Key Takeaways
+## Key Takeaways
 
 - Pods are temporary and their IP addresses change.
 - Services provide a stable endpoint for Pods.
@@ -558,61 +478,51 @@ Seeing my Kubernetes YAML transformed into actual NGINX configuration made the e
 
 ---
 
+## Interview Questions
 
-
-# Interview Questions
-
-
-
-### Why shouldn't applications communicate directly using Pod IPs?
+<details>
+<summary><strong>Why shouldn't applications communicate directly using Pod IPs?</strong></summary>
 
 Because Pod IPs are dynamic and change whenever Pods are recreated.
 
----
+</details>
 
-
-
-### How does a Service know which Pods to send traffic to?
+<details>
+<summary><strong>How does a Service know which Pods to send traffic to?</strong></summary>
 
 Using labels and selectors.
 
----
+</details>
 
-
-
-### Why isn't NodePort commonly used in production?
+<details>
+<summary><strong>Why isn't NodePort commonly used in production?</strong></summary>
 
 It requires exposing ports on every node, uses high-numbered ports, and becomes difficult to manage at scale.
 
----
+</details>
 
-
-
-### If LoadBalancer already exposes applications, why do we still need Ingress?
+<details>
+<summary><strong>If LoadBalancer already exposes applications, why do we still need Ingress?</strong></summary>
 
 Ingress lets multiple Services share a single external endpoint and provides advanced routing (host-based and path-based), reducing cost and simplifying management.
 
----
+</details>
 
-
-
-### Can an Ingress resource work without an Ingress Controller?
+<details>
+<summary><strong>Can an Ingress resource work without an Ingress Controller?</strong></summary>
 
 No. An Ingress resource only defines routing rules. An Ingress Controller is required to implement those rules.
 
----
+</details>
 
-
-
-### What changes when using the AWS Load Balancer Controller instead of the NGINX Ingress Controller?
+<details>
+<summary><strong>What changes with the AWS Load Balancer Controller?</strong></summary>
 
 The Kubernetes Ingress resource remains the same, but instead of generating `nginx.conf`, the AWS Load Balancer Controller calls AWS APIs to create and manage ALBs, Listener Rules, Target Groups, Security Groups, and related resources.
 
----
+</details>
 
-
-
-# Final Thoughts
+## Final Thoughts
 
 Today's biggest realization was that Kubernetes networking is built around layers of abstraction.
 
